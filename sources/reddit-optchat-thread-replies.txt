@@ -1,0 +1,477 @@
+Comments Section
+sleight42
+5d ago
+How does it perform? Your description implies that, once full, the chat operates at a
+full context window
+, swapping content in and out?
+17
+TheVoxcraft
+5d ago
+The opposite actually, it never runs at a full window. Each turn the model gets a fixed, bounded view of the whole history: one line per recent message, and older stretches collapsed into summary lines, capped at ~128 KB (roughly 30K tokens). That's it. No sliding window, no swapping chunks in and out.
+If the model needs detail that's been summarised away, it calls `zoom` on that line and reads the originals — like opening a folder. so the context stays small and mostly cached every turn, and the model pays for detail only when it actually asks for it
+In practice that makes turns faster and cheaper than a conversation that's grown to 150K tokens, with the trade-off that the model sometimes has to do one or two zooms to recall something old. Summarising happens off to the side with a cheaper model (~$0.03 a call on Sonnet but this becomes a lot of calls though, luckily cheap on the sub)
+6
+D-3r1stljqso3
+5d ago
+How does it know that the details it looks for was even mentioned if they are summarised away?
+9
+sleight42
+5d ago
+Huh. How does it decide if it needs details? It does inference on a small context, realizes it needs more info, and reaches to your tool before asking questions of the user or reaching for the file system?
+4
+voxvoxboy
+5d ago
+I think you got it. It's similar in spirit to RLMs if you have seen them. The model uses tool calls to search around the memory view, zooming in and out on different detail/summarization levels.
+Imagine it has big map (of all prior conversations) always in context, that it can zoom in on to get more detailed info on the memories, but the map is also automatically more detailed if it's closer, in time, to lastest message.
+4
+Continue this thread
+Continue this thread
+Continue this thread
+StorageHungry8380
+5d ago
+One issue I can see is that summarizing can be very different depending on what focus you have. Take code, are you focusing on the data flow, or are you focusing on the user scenarios, etc. So a summary might hide detail crucial for the current task, and thus the model can't know it should zoom in on a section.
+Though it seems a straight forward workaround is to keep multiple summaries, focused on the different important aspects. The harness could then pick the summary tree that's most relevant for the current task.
+2
+colin_colout
+5d ago
+what's the cache %?
+1
+voxvoxboy
+5d ago
+Quite good, over 90+% on main model and it's subagents!
+2
+Continue this thread
+Wonderful_Value_6385
+4d ago
+how does paying a model to do something work for local model subreddit?
+1
+Continue this thread
+Continue this thread
+People also ask about section
+People also ask about
+Overview of Pi extension for OptChat
+Best resources for understanding OptChat
+Details on Victor Taelin's OptChat recipe
+Best practices for hosting LLaMA locally
+How to optimize LLaMA for specific tasks
+
+
+=====PAGE=====
+
+Comments Section
+TheVoxcraft
+5d ago
+The opposite actually, it never runs at a full window. Each turn the model gets a fixed, bounded view of the whole history: one line per recent message, and older stretches collapsed into summary lines, capped at ~128 KB (roughly 30K tokens). That's it. No sliding window, no swapping chunks in and out.
+If the model needs detail that's been summarised away, it calls `zoom` on that line and reads the originals — like opening a folder. so the context stays small and mostly cached every turn, and the model pays for detail only when it actually asks for it
+In practice that makes turns faster and cheaper than a conversation that's grown to 150K tokens, with the trade-off that the model sometimes has to do one or two zooms to recall something old. Summarising happens off to the side with a cheaper model (~$0.03 a call on Sonnet but this becomes a lot of calls though, luckily cheap on the sub)
+6
+D-3r1stljqso3
+5d ago
+How does it know that the details it looks for was even mentioned if they are summarised away?
+9
+sleight42
+5d ago
+Huh. How does it decide if it needs details? It does inference on a small context, realizes it needs more info, and reaches to your tool before asking questions of the user or reaching for the file system?
+4
+voxvoxboy
+5d ago
+I think you got it. It's similar in spirit to RLMs if you have seen them. The model uses tool calls to search around the memory view, zooming in and out on different detail/summarization levels.
+Imagine it has big map (of all prior conversations) always in context, that it can zoom in on to get more detailed info on the memories, but the map is also automatically more detailed if it's closer, in time, to lastest message.
+4
+sleight42
+5d ago
+But it's reaching out to an external data store, presumably disk, frequently during inference whenever it needs to zoom in?
+I'd definitely need to see benchmarks under many different permutations of context, persisted context, and inputs.
+8
+Continue this thread
+Continue this thread
+BalorNG
+5d ago
+Yea, tiered memory approaches with various degress of "granularity" seems pretty cool, instead of binary (full vs compacted), but shouldn't it basically negate kv-caching on every turn?
+2
+Continue this thread
+Continue this thread
+Continue this thread
+Continue this thread
+StorageHungry8380
+5d ago
+One issue I can see is that summarizing can be very different depending on what focus you have. Take code, are you focusing on the data flow, or are you focusing on the user scenarios, etc. So a summary might hide detail crucial for the current task, and thus the model can't know it should zoom in on a section.
+Though it seems a straight forward workaround is to keep multiple summaries, focused on the different important aspects. The harness could then pick the summary tree that's most relevant for the current task.
+2
+colin_colout
+5d ago
+what's the cache %?
+1
+voxvoxboy
+5d ago
+Quite good, over 90+% on main model and it's subagents!
+2
+Continue this thread
+Wonderful_Value_6385
+4d ago
+how does paying a model to do something work for local model subreddit?
+1
+Continue this thread
+People also ask about section
+People also ask about
+Overview of Pi extension for OptChat
+Best resources for understanding OptChat
+Details on Victor Taelin's OptChat recipe
+Best practices for hosting LLaMA locally
+How to optimize LLaMA for specific tasks
+
+
+=====PAGE=====
+
+Comments Section
+TheVoxcraft
+5d ago
+Haven't tried it in spesific, but honestly.. probably not well, and I'd be wary.
+There are two different jobs here:
+The
+summarizer
+has to compress each message without losing the facts that matter, and when I tested smaller models for that, they started inventing details in the summaries. That's the worst failure mode for a memory system, because a wrong summary gets merged upward and poisons everything above it.
+The
+main agent
+also has to actually use the view: read summary lines, decide what to zoom into, and not just answer from the summaries. The frontier models do that well, but smaller ones would forget to call zoom and gather all the context it needed.
+Nothing about the recipe is clever or model-specific, it's the newest generation of models being good at organizing information that makes it work. The summarizer is a setting, so you could point it at a any model and see. If you do, I'd love to hear the result, but I'd expect the summaries to drift
+8
+GuaranteedGuardian_Y
+5d ago
+Downvote is not from me. I disagree with your take that summarizer is fatal. You can always keep core fact + reference and re-hydrate rich context based on necessity. There is no real need to disregard rich context after atomization.
+6
+vacon04
+5d ago
+Which is what the more advanced models are already doing. They get a summary so they obviously lose detail, but then they re-read things to get the proper details again on demand. It's not extremely efficient but it's not catastrophic in any way, and the model can get back on track fairly quickly, even faster if you have some proper, structured documentation that the model can rely on.
+4
+GuaranteedGuardian_Y
+5d ago
+Yes, correct. I would only add that the big AI providers are doing this, not the models themselves. It's the orchestration around the model. That's probably obvious which is why you don't mention it.
+1
+Continue this thread
+Continue this thread
+Continue this thread
+Continue this thread
+Continue this thread
+People also ask about section
+People also ask about
+Overview of Pi extension for OptChat
+Best resources for understanding OptChat
+Details on Victor Taelin's OptChat recipe
+Best practices for hosting LLaMA locally
+How to optimize LLaMA for specific tasks
+
+
+=====PAGE=====
+
+Comments Section
+GuaranteedGuardian_Y
+5d ago
+Downvote is not from me. I disagree with your take that summarizer is fatal. You can always keep core fact + reference and re-hydrate rich context based on necessity. There is no real need to disregard rich context after atomization.
+6
+vacon04
+5d ago
+Which is what the more advanced models are already doing. They get a summary so they obviously lose detail, but then they re-read things to get the proper details again on demand. It's not extremely efficient but it's not catastrophic in any way, and the model can get back on track fairly quickly, even faster if you have some proper, structured documentation that the model can rely on.
+4
+GuaranteedGuardian_Y
+5d ago
+Yes, correct. I would only add that the big AI providers are doing this, not the models themselves. It's the orchestration around the model. That's probably obvious which is why you don't mention it.
+1
+vacon04
+5d ago
+Yes, it all comes together at the end of the day. You can orchestrate around local models too, giving them a proper structure to rely on. There's a reason why some people have great success with weaker models while some struggle on the same task with frontier ones. People really underestimate what documentation and structure can give to a model.
+The idea of "compactation" is hell is outdated in my opinion. You do take a small hit, but with the proper structure, there's no reason why a model can't recover. If you're yoloing the whole process then yes, you'll have a bad time, but if you remain disciplined then you'll have more success.
+Some think that LLMs all low you to be more adventurous when building a product, but I argue you need to be more disciplined than ever to have success. Unfortunately, most people don't work under strict engineering and/or scientific principles, so they struggle to extract the most out of the models.
+2
+Continue this thread
+Continue this thread
+Continue this thread
+People also ask about section
+People also ask about
+Overview of Pi extension for OptChat
+Best resources for understanding OptChat
+Details on Victor Taelin's OptChat recipe
+Best practices for hosting LLaMA locally
+How to optimize LLaMA for specific tasks
+
+
+=====PAGE=====
+
+Comments Section
+milpster
+5d ago
+Does this work well with
+qwen 3.8 27b
+or only with the big frontier models?
+8
+TheVoxcraft
+5d ago
+Haven't tried it in spesific, but honestly.. probably not well, and I'd be wary.
+There are two different jobs here:
+The
+summarizer
+has to compress each message without losing the facts that matter, and when I tested smaller models for that, they started inventing details in the summaries. That's the worst failure mode for a memory system, because a wrong summary gets merged upward and poisons everything above it.
+The
+main agent
+also has to actually use the view: read summary lines, decide what to zoom into, and not just answer from the summaries. The frontier models do that well, but smaller ones would forget to call zoom and gather all the context it needed.
+Nothing about the recipe is clever or model-specific, it's the newest generation of models being good at organizing information that makes it work. The summarizer is a setting, so you could point it at a any model and see. If you do, I'd love to hear the result, but I'd expect the summaries to drift
+8
+GuaranteedGuardian_Y
+5d ago
+Downvote is not from me. I disagree with your take that summarizer is fatal. You can always keep core fact + reference and re-hydrate rich context based on necessity. There is no real need to disregard rich context after atomization.
+6
+vacon04
+5d ago
+Which is what the more advanced models are already doing. They get a summary so they obviously lose detail, but then they re-read things to get the proper details again on demand. It's not extremely efficient but it's not catastrophic in any way, and the model can get back on track fairly quickly, even faster if you have some proper, structured documentation that the model can rely on.
+4
+Continue this thread
+Continue this thread
+Continue this thread
+Continue this thread
+Continue this thread
+People also ask about section
+People also ask about
+Overview of Pi extension for OptChat
+Best resources for understanding OptChat
+Details on Victor Taelin's OptChat recipe
+Best practices for hosting LLaMA locally
+How to optimize LLaMA for specific tasks
+
+
+=====PAGE=====
+
+Comments Section
+fligglymcgee
+5d ago
+I get the premise and I have also built/tested similar folding context chains before, it’s a good approach. I will keep pressing on this point though, not because I want to be rude, but because it’s the same sinkhole a bunch of us have been in:
+“… a summary doesn’t need to be perfect…it needs to be a good enough signpost…”
+Yes, but this still doesn’t answer the same question: Is it?
+Signposts point to places that objectively are somewhere. Context isn’t objective unless the topic remains singular and highly structured. These signposts are more like “last known locations”, which are valuable, but the summarizing agent can’t anticipate what’s important to the conversation that hasn’t happened yet; or to the yet-unknown and changing user’s intent.
+I do mean this in a ponderous way and not accusatory, despite my underslept tone here.
+5
+TheVoxcraft
+5d ago
+No problem :) and fair but maybe this answers your question better:
+"What will matter later" is unknowable, agreed, but the summarizer isn't asked to guess it. "What happened in this stretch of the chat" is fairly objective: who asked what, which PR, what got decided. That's mostly what the lines record. And the tree is positional, not topical, so a detail nobody cared about at the time
+still
+sits under some line that says roughly when it happened, and you walk down to it. There's also plain-text search over the originals for exact names and numbers, which skips the summary navigation.
+Is it good enough? The 75% is the honest answer, in hard questions asked looong after the summaries were written, about things the summarizer had no reason to flag. It's not 100%, and I don't yet know how much of the gap is "unfindable" vs "the agent stopped zooming too early" either.
+3
+Continue this thread
+People also ask about section
+People also ask about
+Overview of Pi extension for OptChat
+Best resources for understanding OptChat
+Details on Victor Taelin's OptChat recipe
+Best practices for hosting LLaMA locally
+How to optimize LLaMA for specific tasks
+
+
+=====PAGE=====
+
+Comments Section
+TheVoxcraft
+5d ago
+I understand what you're getting at, but I think the prompt is the least interesting part. The prompt is just a summarizer; what makes this different is the structure around it.
+Nothing is ever deleted. Every message stays in an append-only log, and the summaries form a tree over it. The agent sees a bounded view (recent messages one line each, older stretches as summary lines) and can `zoom` any line to read the original wording.
+So a summary doesn't need to be perfect or complete, it needs to be a good enough signpost that the agent knows where to zoom.
+If a summary is vague or wrong, the cost is an extra zoom, not a lost fact. That's a very different failure mode from "keep only what's important" compaction, where whatever the summarizer dropped is gone.
+On empirics: I've only done small blind-graded studies on my own history (tens of thousands of messages), not a comparison against long-context baselines. Fable grading answers to ~40 questions about old facts: ~75% right with the default summarizer, and prompt tweaks moved it a bit, which actually supports your point that prompt wording matters little here. A plain-text search tool cut zooms needed per question from avg. 6 to 2.4. But that is only efficiency improvements.. Either way it can, and will, zoom in to find what happened verbatim.
+But a proper benchmark vs long context would be genuinely useful and I don't have one.
+0
+fligglymcgee
+5d ago
+I get the premise and I have also built/tested similar folding context chains before, it’s a good approach. I will keep pressing on this point though, not because I want to be rude, but because it’s the same sinkhole a bunch of us have been in:
+“… a summary doesn’t need to be perfect…it needs to be a good enough signpost…”
+Yes, but this still doesn’t answer the same question: Is it?
+Signposts point to places that objectively are somewhere. Context isn’t objective unless the topic remains singular and highly structured. These signposts are more like “last known locations”, which are valuable, but the summarizing agent can’t anticipate what’s important to the conversation that hasn’t happened yet; or to the yet-unknown and changing user’s intent.
+I do mean this in a ponderous way and not accusatory, despite my underslept tone here.
+5
+TheVoxcraft
+5d ago
+No problem :) and fair but maybe this answers your question better:
+"What will matter later" is unknowable, agreed, but the summarizer isn't asked to guess it. "What happened in this stretch of the chat" is fairly objective: who asked what, which PR, what got decided. That's mostly what the lines record. And the tree is positional, not topical, so a detail nobody cared about at the time
+still
+sits under some line that says roughly when it happened, and you walk down to it. There's also plain-text search over the originals for exact names and numbers, which skips the summary navigation.
+Is it good enough? The 75% is the honest answer, in hard questions asked looong after the summaries were written, about things the summarizer had no reason to flag. It's not 100%, and I don't yet know how much of the gap is "unfindable" vs "the agent stopped zooming too early" either.
+3
+Continue this thread
+TheVoxcraft
+5d ago
+Of course there's a tradeoff here: quality seems excellent but costs can be high, compared to other solutions. Also you'll very likely need frontier models.
+0
+Continue this thread
+People also ask about section
+People also ask about
+Overview of Pi extension for OptChat
+Best resources for understanding OptChat
+Details on Victor Taelin's OptChat recipe
+Best practices for hosting LLaMA locally
+How to optimize LLaMA for specific tasks
+
+
+=====PAGE=====
+
+Comments Section
+FBIFreezeNow
+5d ago
+Difference between this and
+pi-vcc
+?
+7
+my_name_isnt_clever
+4d ago
+This requires an LLM summarization step, pi-vcc is instant. I'll stick with VCC for now.
+6
+Continue this thread
+People also ask about section
+People also ask about
+Overview of Pi extension for OptChat
+Best resources for understanding OptChat
+Details on Victor Taelin's OptChat recipe
+Best practices for hosting LLaMA locally
+How to optimize LLaMA for specific tasks
+
+
+=====PAGE=====
+
+Comments Section
+snugglezone
+5d ago
+Is anyone using either of these:
+https://pi.dev/packages/billion-context
+https://pi.dev/packages/billion-context-pi
+Like.. it says the first one has 700k installs a month, but I never see anyone mention it and no google results from people who tried???
+6
+sabotrax
+5d ago
+Using it in my setup pi/hermes -> bili -> local llm for about a month now. Works very well in pi without any configuration for 96 oder 128k ctx. hermes interaction with bili is not as good and needs some configuration. But does work well also.
+1
+Continue this thread
+People also ask about section
+People also ask about
+Overview of Pi extension for OptChat
+Best resources for understanding OptChat
+Details on Victor Taelin's OptChat recipe
+Best practices for hosting LLaMA locally
+How to optimize LLaMA for specific tasks
+
+
+=====PAGE=====
+
+Comments Section
+voxvoxboy
+5d ago
+Well I guess it depends on how gpu-rich you are :p
+But I also believe local (runnable) llms will catch up very soon in capability!
+4
+voxvoxboy
+5d ago
+OptChat's constant context size also can be interesting for this crowd
+2
+Continue this thread
+People also ask about section
+People also ask about
+Overview of Pi extension for OptChat
+Best resources for understanding OptChat
+Details on Victor Taelin's OptChat recipe
+Best practices for hosting LLaMA locally
+How to optimize LLaMA for specific tasks
+
+
+=====PAGE=====
+
+Comments Section
+Imaginary-Unit-3267
+5d ago
+If this doesn't work with local models very well, it doesn't belong in LocalLLaMA.
+8
+voxvoxboy
+5d ago
+Well I guess it depends on how gpu-rich you are :p
+But I also believe local (runnable) llms will catch up very soon in capability!
+4
+voxvoxboy
+5d ago
+OptChat's constant context size also can be interesting for this crowd
+2
+Continue this thread
+Continue this thread
+People also ask about section
+People also ask about
+Overview of Pi extension for OptChat
+Best resources for understanding OptChat
+Details on Victor Taelin's OptChat recipe
+Best practices for hosting LLaMA locally
+How to optimize LLaMA for specific tasks
+
+
+=====PAGE=====
+
+Comments Section
+D6613
+5d ago
+This is an interesting idea. I've thought about building something like this for knowledge base info, where it slowly decays. I was thinking LRU style, perhaps. But it's clever to use it for context.
+I do suspect that you're responding to every message with Claude, though, which is pretty off putting. We're here for you and your project, not for generated text.
+4
+voxvoxboy
+5d ago
+Sorry about that, I got Fable to help with some of the explanations yes, this isn't the original thread so I've been trying my best to answer all the comments.
+But yes I find that quite interesting! But I would say that the way OptChat works it doesn't really need it for it to work.
+0
+Continue this thread
+People also ask about section
+People also ask about
+Overview of Pi extension for OptChat
+Best resources for understanding OptChat
+Details on Victor Taelin's OptChat recipe
+Best practices for hosting LLaMA locally
+How to optimize LLaMA for specific tasks
+
+
+=====PAGE=====
+
+Comments Section
+D-3r1stljqso3
+5d ago
+How does it know that the details it looks for was even mentioned if they are summarised away?
+9
+People also ask about section
+People also ask about
+Overview of Pi extension for OptChat
+Best resources for understanding OptChat
+Details on Victor Taelin's OptChat recipe
+Best practices for hosting LLaMA locally
+How to optimize LLaMA for specific tasks
+
+
+=====PAGE=====
+
+Comments Section
+sabotrax
+5d ago
+Using it in my setup pi/hermes -> bili -> local llm for about a month now. Works very well in pi without any configuration for 96 oder 128k ctx. hermes interaction with bili is not as good and needs some configuration. But does work well also.
+1
+People also ask about section
+People also ask about
+Overview of Pi extension for OptChat
+Best resources for understanding OptChat
+Details on Victor Taelin's OptChat recipe
+Best practices for hosting LLaMA locally
+How to optimize LLaMA for specific tasks
+
+
+=====PAGE=====
+
+Comments Section
+Successful_Net_2832
+3d ago
+It's a fancy memory system. Big woop
+2
+People also ask about section
+People also ask about
+Overview of Pi extension for OptChat
+Best resources for understanding OptChat
+Details on Victor Taelin's OptChat recipe
+Best practices for hosting LLaMA locally
+How to optimize LLaMA for specific tasks

@@ -1,0 +1,329 @@
+Comments Section
+Combinatorilliance
+6d ago
+It does, but not completely, first of all they introduced a caching optimization for the inference engine that addresses this (I'm not sure about the specifics).
+Second, if you use compaction at all, the slowdown would happen anyway (although only once, not n times for each edit early in the context). The paper shows that on-the-go compaction improves task performance on certain tasks too, I assume this is only true for longer tasks and that this works by reducing noise in the context that is irrelevant to the task at hand.
+Last, the paper also says you can steer the model to prefer editing only the last message which apparently steers the model quite reliably not to do this unless it's absolutely necessary.
+9
+wishstudio
+6d ago
+Its “optimization” is basically only recomputing changed part and splicing the resulting partial kv cache to the original one. So anything after the changed part is kind of using stale values. The paper claims this won’t affect accuracy but who knows. Even this crude version involves re-rotating keys because the lengths of changed part may be different. I suspect it will be much more difficult to implement for complex attention mechanisms like deepseek flash’s CSA and HCA.
+7
+keepthepace
+6d ago
+That is impossible that it does not affect accuracy in some tasks.
+4
+Combinatorilliance
+6d ago
+Very good feedback!
+That does sound very shaky. I hope they and others can find improvements to the performance implications, I cannot imagine this wouldn't hurt accuracy in the long run.
+That being said, perhaps the accuracy impact is less bad than the accuracy impact of traditional methods like compaction. Compaction has
+huge
+downsides.
+They did introduce the flops measure for efficiency, and their strategy
+does
+outperform other context management strategies on long horizon benches. It would be kind of funny if this cache downside is "bad", but "less bad than the established alternatives".
+I want to invoke Dr Károly Zsolnai-Fehér: "imagine where we'll be two more papers down the line!"
+1
+Continue this thread
+Continue this thread
+
+
+=====PAGE=====
+
+Comments Section
+b183729
+6d ago
+I will read the paper, but before I dive in, wouldn't this force the model to re-infer the whole context from the point of the change onwards?
+31
+Combinatorilliance
+6d ago
+It does, but not completely, first of all they introduced a caching optimization for the inference engine that addresses this (I'm not sure about the specifics).
+Second, if you use compaction at all, the slowdown would happen anyway (although only once, not n times for each edit early in the context). The paper shows that on-the-go compaction improves task performance on certain tasks too, I assume this is only true for longer tasks and that this works by reducing noise in the context that is irrelevant to the task at hand.
+Last, the paper also says you can steer the model to prefer editing only the last message which apparently steers the model quite reliably not to do this unless it's absolutely necessary.
+9
+wishstudio
+6d ago
+Its “optimization” is basically only recomputing changed part and splicing the resulting partial kv cache to the original one. So anything after the changed part is kind of using stale values. The paper claims this won’t affect accuracy but who knows. Even this crude version involves re-rotating keys because the lengths of changed part may be different. I suspect it will be much more difficult to implement for complex attention mechanisms like deepseek flash’s CSA and HCA.
+7
+keepthepace
+6d ago
+That is impossible that it does not affect accuracy in some tasks.
+4
+Combinatorilliance
+6d ago
+Very good feedback!
+That does sound very shaky. I hope they and others can find improvements to the performance implications, I cannot imagine this wouldn't hurt accuracy in the long run.
+That being said, perhaps the accuracy impact is less bad than the accuracy impact of traditional methods like compaction. Compaction has
+huge
+downsides.
+They did introduce the flops measure for efficiency, and their strategy
+does
+outperform other context management strategies on long horizon benches. It would be kind of funny if this cache downside is "bad", but "less bad than the established alternatives".
+I want to invoke Dr Károly Zsolnai-Fehér: "imagine where we'll be two more papers down the line!"
+1
+Continue this thread
+Continue this thread
+kaisurniwurer
+6d ago
+Even a change in the topmost ~2k tokens (depending on the SWA step) will force reprocessing of the full context.
+This is why those ugly "preserve thinking" flags came to be.
+2
+No_Afternoon_4260
+6d ago
+There you need Nvidia for the fastest prefill possible
+1
+Continue this thread
+
+
+=====PAGE=====
+
+Comments Section
+Combinatorilliance
+6d ago
+You mean table 2? I'm not sure I agree it performs worse than summary? Pflops lower is better, and accuracy higher is better.
+Out of the box summary has better accuracy than the clm method, that makes a lot of sense to me, this is for a 9b model, I can see it botch edits prior to RL. They note that larger models perform better out of the box.
+After RL on the 9b model, summary and CLM perform about the same on accuracy, which supports my "botches edits" hypothesis.
+However, both out of the box and after RL, CLM is significantly more efficient than the summary strategy, which is a very meaningful finding unless I'm missing something important you saw?
+They also explicitly note that smaller models are worse at being a CLM out of the box, so yes you do need to be wary with anything smaller than like qwen 27b-range models:
+Before training, CLM with Qwen3.5-9B underperforms the summary harness by six points due to the smaller model’s limited context-management capabilities
+In other comparisons, their method straight up outperforms summary on accuracy and efficiency, see figure 5, figure 6 for instance.
+2
+FullOf_Bad_Ideas
+6d ago
+However, both out of the box and after RL, CLM is significantly more efficient than the summary strategy, which is a very meaningful finding unless I'm missing something important you saw?
+Unless I'm mistaken, they use SGLang suffix caching to get the high efficiency numbers. It's a dirty method of changing KV cache.
+Numbers in papers are usually benchmaxxed to look good and most of the time fall apart when rigorous study checks for their accuracy. So if something shows that it's barely beating some other method, in a larger sample size even that gain is probably smaller. Meta superintelligence lab was doing it already in the past.
+2
+Combinatorilliance
+6d ago
+Makes total sense, we need independent measurements.
+I don't think that CLM
+beats
+summary in accuracy, it's much too close to in this instance. Not sure about the efficiency implications, if their summary is measured without the optimization and clm with, that's kinda whacky. Then they'd be conflating two things, the efficiency improvements due to a hacky optimization and the efficiency improvements (hopefully?) Due to their clm approach.
+The second is the only one that matters.
+I do think their benchmark is really cool here though, we and others can use that!
+1
+FullOf_Bad_Ideas
+6d ago
+Suffix cache wouldn't work for summary, as a summary re-phrases the context. It's just not compatible.
+And I was a bit mistaken about it earlier - most of the results there are without suffix cache being used, and it's already more FLOPS efficient.
+I expect CLM to be more brittle than a summary, since it's like doing a surgery on your own brain.
+1
+Continue this thread
+Continue this thread
+Continue this thread
+Continue this thread
+Continue this thread
+
+
+=====PAGE=====
+
+Comments Section
+FullOf_Bad_Ideas
+6d ago
+However, both out of the box and after RL, CLM is significantly more efficient than the summary strategy, which is a very meaningful finding unless I'm missing something important you saw?
+Unless I'm mistaken, they use SGLang suffix caching to get the high efficiency numbers. It's a dirty method of changing KV cache.
+Numbers in papers are usually benchmaxxed to look good and most of the time fall apart when rigorous study checks for their accuracy. So if something shows that it's barely beating some other method, in a larger sample size even that gain is probably smaller. Meta superintelligence lab was doing it already in the past.
+2
+Combinatorilliance
+6d ago
+Makes total sense, we need independent measurements.
+I don't think that CLM
+beats
+summary in accuracy, it's much too close to in this instance. Not sure about the efficiency implications, if their summary is measured without the optimization and clm with, that's kinda whacky. Then they'd be conflating two things, the efficiency improvements due to a hacky optimization and the efficiency improvements (hopefully?) Due to their clm approach.
+The second is the only one that matters.
+I do think their benchmark is really cool here though, we and others can use that!
+1
+FullOf_Bad_Ideas
+6d ago
+Suffix cache wouldn't work for summary, as a summary re-phrases the context. It's just not compatible.
+And I was a bit mistaken about it earlier - most of the results there are without suffix cache being used, and it's already more FLOPS efficient.
+I expect CLM to be more brittle than a summary, since it's like doing a surgery on your own brain.
+1
+Combinatorilliance
+6d ago
+I expect CLM to be more brittle than a summary, since it's like doing a surgery on your own brain.
+Yes to the surgery on the brain, maybe on the "more brittle than a summary". I assume that a codex summary is similar to a pi compaction? If so, it is known that a compaction throws away a lot of important information. The larger your context is, the more decisions your model needs to make during a summary/compaction.
+CLMs make these decisions on-the-go.
+I think it's important to make the distinction between "a source of faults", which I agree that the caching strategy is definitely a "source of faults". But compaction/summarization is itself also a source of faults.
+And as long as "faults_clm_caching < faults_compaction", then clm caching still wins.
+1
+Continue this thread
+Continue this thread
+Continue this thread
+
+
+=====PAGE=====
+
+Comments Section
+BringTea_666
+6d ago
+So it's basically silly tavern but in paper form ? Context shennegans are probably the oldest form of context management as early models had like 512-1000-4000 context size.
+23
+antwon_dev
+6d ago
+I can’t believe I was dealing with 4K context on GPT 3.5 in late 2022 lmfao we have come so far in 4 short years
+21
+wayneworkman
+6d ago
+my from scratch model has 32k. yeah we've come a long way.
+4
+Continue this thread
+Continue this thread
+
+
+=====PAGE=====
+
+Comments Section
+Magos
+6d ago
+It's pretty interesting, but after debating with 6.1 Sol for 15 minutes on this paper, I'm not sure the gains here are better than using a traditional Ralph Loop system with handoff?
+If the point of rewrite is during compaction, that is basically similar to a Ralph Loop iteration.
+I guess theoretically you can trim context mid-way through an iteration using this method, but I'm pretty sure you have to recalculate the context that way (no easy way for me to test right now)m which defeats the purpose of making it faster due to prompt caching being the standard nowadays
+2
+Combinatorilliance
+6d ago
+Well, I can't say. I don't have any measurements on the ralph loop with handoff, this is also why they introduced context bench because this kinda thing wasn't really being benchmarked anyway.
+I'm sure the paper's approach isn't going to prove some kind of global optimum, but it does open the discussion further
+1
+Continue this thread
+
+
+=====PAGE=====
+
+Comments Section
+Imaginary-Unit-3267
+6d ago
+This sounds fascinating, and resembles things I've played with, but what I worry about is whether it would just invalidate the cache over and over. You say they made some kind of "optimizations" in SGLang, but I use llama.cpp, so that doesn't apply here - do you think the quality improvement is worth the massive increase in latency from prompt reprocessing over and over, or is it not worth the bother for me?
+1
+Combinatorilliance
+6d ago
+I think it's not production ready in that regard. This is a super promising research direction, but the speed tradeoff is very real (tested it yesterday on my machine with llama.cpp) and my qwen3.8 27b got confused on the editing initially because the plugin acted a bit weird.
+I'd wait until "a few more papers down the line", once people have started tinkering with it a bit more and some issues have been smoothed out then it sounds more realistic.
+Some people in this thread also pointed out that the caching trick isn't ideal either and has some drawbacks that need to be taken into consideration.
+3
+Past-Town-9807
+2d ago
+I've done all sorts of experiments with context engineering and stopped every single one of them because it was just so punishingly expensive. At my most extreme I was doing I think 2 or 3 messages tops in a session, one of them acting as a state machine summarizing the previous turns and the others for new tool results or new user prompt. I assume others have tried all this stuff too. The problem is that the punishment ($$, or wall time) is so sharp for busting the cache that it's just not worth it. Also it worked better for older models that weren't trained to actually solve everything you tell them to solve, and made it slightly worth the extra costs. Newer models *are* so trained, so they don't need to have their context so heavily controlled anymore. At least IME anyway. So now for me cache is king.
+2
+Continue this thread
+
+
+=====PAGE=====
+
+Comments Section
+__Maximum__
+6d ago
+I think prime-agent is already doing it?
+1
+Combinatorilliance
+6d ago
+No clue, never heard of prime agent before! Even so, sounds great to do more research on it!
+1
+Continue this thread
+
+
+=====PAGE=====
+
+Comments Section
+EnvironmentalLeg8506
+6d ago
+You mentioned in the comments that you can steer it as you go by telling the model what is and isn't important to you. Once the context is a file the model edits, that file is its working memory, and the injection risk you listed comes from the same property that makes it useful: whatever gets written in stays until something takes it out.
+So the edit history matters about as much as the edits. If each context edit lands as a diff you can read, and you can revert one without restarting the run, a hallucinated instruction becomes something you can find and drop instead of something that quietly shapes the rest of the task. It also lets the steering go both ways, since you see what it decided to keep and not only what you told it to keep.
+That's the first thing I'd look for in the pi plugin before trusting it with anything long.
+1
+Combinatorilliance
+6d ago
+Holy bot!
+1
+Continue this thread
+
+
+=====PAGE=====
+
+Comments Section
+charmander_cha
+6d ago
+É uma evolução do RLM?
+0
+Combinatorilliance
+6d ago
+Yes, this work is based on RLM. I saw that the Github author of the pi-rlm plugin also worked on this project, I assume he's an author on the paper too.
+4
+Continue this thread
+
+
+=====PAGE=====
+
+Comments Section
+stoppableDissolution
+6d ago
+Isnt it basically cache compaction, that ends up driving the models insane after few iterations?
+1
+Combinatorilliance
+6d ago
+No, two key differences:
+The model itself decides what to do and how, cache compaction assumes a specific strategy and a specific output template, in fact, you can even steer the process as you go by telling the model what is and what isn't important according to you
+Cache compaction relies on the model making many decisions on what is and what is not important in one go, which is known to introduce faults
+that ends up driving the models insane after few iterations
+This works better than cache compaction does for tasks that take over 20 hours in total for qwen3.6 26b, so at least on the long horizon benchmarks the models don't go insane at all
+3
+Continue this thread
+
+
+=====PAGE=====
+
+Comments Section
+FullOf_Bad_Ideas
+6d ago
+What is this "Summary" that is trailing close by in terms of the performance lol?
+Method Acc. (%) ↑ PFLOPs / Q ↓ Summary 34.7 → 42.1 4.01 → 2.19 CLM 28.8 → 42.5 1.52 → 1.34
+it's ridiculous if summary works better by default and works basically as good after training.
+Tested only on a few small Qwen models, might as well fall apart on bigger ones.
+Meta Superintelligence lab has been putting out a lot of shitty papers recently, I like FAIR papers much better!
+3
+Combinatorilliance
+6d ago
+You mean table 2? I'm not sure I agree it performs worse than summary? Pflops lower is better, and accuracy higher is better.
+Out of the box summary has better accuracy than the clm method, that makes a lot of sense to me, this is for a 9b model, I can see it botch edits prior to RL. They note that larger models perform better out of the box.
+After RL on the 9b model, summary and CLM perform about the same on accuracy, which supports my "botches edits" hypothesis.
+However, both out of the box and after RL, CLM is significantly more efficient than the summary strategy, which is a very meaningful finding unless I'm missing something important you saw?
+They also explicitly note that smaller models are worse at being a CLM out of the box, so yes you do need to be wary with anything smaller than like qwen 27b-range models:
+Before training, CLM with Qwen3.5-9B underperforms the summary harness by six points due to the smaller model’s limited context-management capabilities
+In other comparisons, their method straight up outperforms summary on accuracy and efficiency, see figure 5, figure 6 for instance.
+2
+FullOf_Bad_Ideas
+6d ago
+However, both out of the box and after RL, CLM is significantly more efficient than the summary strategy, which is a very meaningful finding unless I'm missing something important you saw?
+Unless I'm mistaken, they use SGLang suffix caching to get the high efficiency numbers. It's a dirty method of changing KV cache.
+Numbers in papers are usually benchmaxxed to look good and most of the time fall apart when rigorous study checks for their accuracy. So if something shows that it's barely beating some other method, in a larger sample size even that gain is probably smaller. Meta superintelligence lab was doing it already in the past.
+2
+Combinatorilliance
+6d ago
+Makes total sense, we need independent measurements.
+I don't think that CLM
+beats
+summary in accuracy, it's much too close to in this instance. Not sure about the efficiency implications, if their summary is measured without the optimization and clm with, that's kinda whacky. Then they'd be conflating two things, the efficiency improvements due to a hacky optimization and the efficiency improvements (hopefully?) Due to their clm approach.
+The second is the only one that matters.
+I do think their benchmark is really cool here though, we and others can use that!
+1
+Continue this thread
+Continue this thread
+Continue this thread
+Continue this thread
+Continue this thread
+
+
+=====PAGE=====
+
+Comments Section
+antwon_dev
+6d ago
+I can’t believe I was dealing with 4K context on GPT 3.5 in late 2022 lmfao we have come so far in 4 short years
+21
+wayneworkman
+6d ago
+my from scratch model has 32k. yeah we've come a long way.
+4
+Continue this thread
